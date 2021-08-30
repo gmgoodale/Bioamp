@@ -1,3 +1,4 @@
+# NI DAQmx for windows must be installed to use nidaqmx
 import nidaqmx
 import time
 
