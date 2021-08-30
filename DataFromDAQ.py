@@ -1,4 +1,4 @@
-# NI DAQmx for windows must be installed to use nidaqmx
+# NI DAQmx for windows must be installed to use nidaqmx from: https://www.ni.com/en-us/support/downloads/drivers/download.ni-daqmx.html#409845
 import nidaqmx
 import time
 
