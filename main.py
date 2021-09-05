@@ -1,75 +1,72 @@
+"""Real time plotting of Microphone level using kivy
+"""
+
+from kivy.lang import Builder
 from kivy.app import App
-from kivy.uix.widget import Widget
-from kivy.properties import (
-    NumericProperty, ReferenceListProperty, ObjectProperty
-)
-from kivy.vector import Vector
+from kivy.uix.boxlayout import BoxLayout
+from kivy.garden.graph import MeshLinePlot, Graph
 from kivy.clock import Clock
+from threading import Thread
+import time
+
+import nidaqmx
+from nidaqmx.stream_readers import (AnalogSingleChannelReader, AnalogMultiChannelReader)
+from nidaqmx.constants import (AcquisitionType, CountDirection, Edge,
+    READ_ALL_AVAILABLE, TaskMode, TriggerType)
+#import audioop
+#import pyaudio
+
+def get_microphone_level():
+    print("Getting vals...")
+    with nidaqmx.Task() as read_task:
+        read_task.ai_channels.add_ai_voltage_chan("Dev1/ai0", max_val=1, min_val=-1)
+
+        sampling_rate = 100
+        read_task.timing.cfg_samp_clk_timing(sampling_rate,
+                                        sample_mode=AcquisitionType.CONTINUOUS)
+
+        reader = AnalogSingleChannelReader(read_task.in_stream)
+
+        value_read = reader.read_one_sample()
+
+        print("value read: " + str(value_read))
+
+        global levels
+        while True:
+            time.sleep(0.01)
+            if len(levels) >= 100:
+                levels = []
+            levels.append(value_read + 5)
+
+class Logic(BoxLayout):
+    def __init__(self, **kwargs):
+        super(Logic, self).__init__(**kwargs)
+        self.graph1 = Graph(xlabel='X', ylabel='Y', x_ticks_minor=5,
+            x_ticks_major=25, y_ticks_major=1,
+            y_grid_label=True, x_grid_label=True, padding=5,
+            x_grid=True, y_grid=True, xmin=-0, xmax=100, ymin=-1, ymax=1)
+        self.plot = MeshLinePlot(color=[1, 0, 0, 1])
+
+    def start(self):
+        print("start")
+        self.graph1.add_plot(self.plot)
+        Clock.schedule_interval(self.get_value, 0.01)
+
+    def stop(self):
+        Clock.unschedule(self.get_value)
+
+    def get_value(self, dt):
+        self.plot.points = [(i, j/5) for i, j in enumerate(levels)]
+        #print(levels)
 
 
-class PongPaddle(Widget):
-    score = NumericProperty(0)
-
-    def bounce_ball(self, ball):
-        if self.collide_widget(ball):
-            vx, vy = ball.velocity
-            offset = (ball.center_y - self.center_y) / (self.height / 2)
-            bounced = Vector(-1 * vx, vy)
-            vel = bounced * 1.1
-            ball.velocity = vel.x, vel.y + offset
-
-
-class PongBall(Widget):
-    velocity_x = NumericProperty(0)
-    velocity_y = NumericProperty(0)
-    velocity = ReferenceListProperty(velocity_x, velocity_y)
-
-    def move(self):
-        self.pos = Vector(*self.velocity) + self.pos
-
-
-class PongGame(Widget):
-    ball = ObjectProperty(None)
-    player1 = ObjectProperty(None)
-    player2 = ObjectProperty(None)
-
-    def serve_ball(self, vel=(4, 0)):
-        self.ball.center = self.center
-        self.ball.velocity = vel
-
-    def update(self, dt):
-        self.ball.move()
-
-        # bounce of paddles
-        self.player1.bounce_ball(self.ball)
-        self.player2.bounce_ball(self.ball)
-
-        # bounce ball off bottom or top
-        if (self.ball.y < self.y) or (self.ball.top > self.top):
-            self.ball.velocity_y *= -1
-
-        # went of to a side to score point?
-        if self.ball.x < self.x:
-            self.player2.score += 1
-            self.serve_ball(vel=(4, 0))
-        if self.ball.x > self.width:
-            self.player1.score += 1
-            self.serve_ball(vel=(-4, 0))
-
-    def on_touch_move(self, touch):
-        if touch.x < self.width / 3:
-            self.player1.center_y = touch.y
-        if touch.x > self.width - self.width / 3:
-            self.player2.center_y = touch.y
-
-
-class PongApp(App):
+class RealTimeMicrophone(App):
     def build(self):
-        game = PongGame()
-        game.serve_ball()
-        Clock.schedule_interval(game.update, 1.0 / 60.0)
-        return game
+        return Builder.load_file("look.kv")
 
-
-if __name__ == '__main__':
-    PongApp().run()
+if __name__ == "__main__":
+    levels = []  # store levels of microphone
+    get_level_thread = Thread(target = get_microphone_level)
+    get_level_thread.daemon = True
+    get_level_thread.start()
+    RealTimeMicrophone().run()
