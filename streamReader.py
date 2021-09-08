@@ -18,27 +18,24 @@ from nidaqmx.constants import (AcquisitionType, CountDirection, Edge,
     READ_ALL_AVAILABLE, TaskMode, TriggerType)
 
 with nidaqmx.Task() as read_task:
-        read_task.ai_channels.add_ai_voltage_chan(
-            "Dev1/ai0", max_val=10, min_val=-10)
+        read_task.ai_channels.add_ai_voltage_chan("Dev1/ai0", max_val=10, min_val=-10)
+        read_task.ai_channels.add_ai_voltage_chan("Dev1/ai1", max_val=10, min_val=-10)
 
-        sampling_rate = 2
+        sampling_rate = 1
         read_task.timing.cfg_samp_clk_timing(sampling_rate,
                                         sample_mode=AcquisitionType.CONTINUOUS)
 
-        reader = AnalogSingleChannelReader(read_task.in_stream)
-
-        # Generate random values to test.
-        values_to_test = [random.uniform(-10, 10) for _ in range(10)]
-
-        #values_read = []
-        values_read = collections.deque(5*[0], 5)
-        #number_of_samples = 4
+        reader = AnalogMultiChannelReader(read_task.in_stream)
+        values_read1 = collections.deque(5*[0], 5)
+        values_read2 = collections.deque(5*[0], 5)
+        holder_array = numpy.zeros(2, dtype=numpy.float64)
         for i in range(100):
-            value_read = reader.read_one_sample()
-            values_read.append(value_read)
-            #print(value_read)
+            reader.read_one_sample(holder_array)
+            values_read1.append(holder_array[0])
+            values_read2.append(holder_array[1])
+            print(values_read1)
+            print(values_read2)
             #read_array = numpy.zeros(number_of_samples, dtype=numpy.float64)
             #reader.read_many_sample(read_array, number_of_samples_per_channel=number_of_samples, timeout=10.0)
-            print(values_read)
             #values_read.append(value_read)
-            time.sleep(2)
+            time.sleep(1)

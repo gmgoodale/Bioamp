@@ -1,10 +1,24 @@
+#:kivy 1.0.9
 #:import MeshLinePlot kivy.garden.graph.MeshLinePlot
-Logic:
-    BoxLayout:
-        orientation: "vertical"
-        BoxLayout:
-            size_hint: [1, .8]
-            Graph:
-                id: graph
-                xlabel: ""
-                ylabel: "Level"
+
+<SetGraph>:
+    graph_test : graph_test
+    Graph:
+        id: graph_test
+        plot: MeshLinePlot
+        xlabel:'X'
+        ylabel:'Y'
+        #x_ticks_minor:5
+        x_ticks_major:5
+        y_ticks_major:1
+        y_grid_label:True
+        x_grid_label:True
+        padding:5
+        x_grid:True
+        y_grid:True
+        xmin:0
+        xmax:100
+        ymin:-1
+        ymax:1
+        pos: root.width / 10, root.height / 6
+        size: root.width * 3/4, root.height * 3/4
