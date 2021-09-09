@@ -1,82 +1,74 @@
-"""Real time plotting of Microphone level using kivy
-"""
-
-from kivy.lang import Builder
-from kivy.app import App
-from kivy.uix.boxlayout import BoxLayout
-from kivy.garden.graph import MeshLinePlot, Graph
-from kivy.clock import Clock
-
-from threading import Thread
-import time
-import collections
-
+# NI imports
 import nidaqmx
 from nidaqmx.stream_readers import (AnalogSingleChannelReader, AnalogMultiChannelReader)
 from nidaqmx.constants import (AcquisitionType, CountDirection, Edge,
     READ_ALL_AVAILABLE, TaskMode, TriggerType)
-#import audioop
-#import pyaudio
 
-def get_microphone_level():
-    print("Getting vals...")
-    with nidaqmx.Task() as read_task:
-        read_task.ai_channels.add_ai_voltage_chan("Dev1/ai0", max_val=1, min_val=-1)
-        read_task.ai_channels.add_ai_voltage_chan("Dev1/ai1", max_val=1, min_val=-1)
+# Kivy imports
+from kivy.app import App
+from kivy.garden.graph import MeshLinePlot, Graph
+from kivy.clock import Clock
+from kivy.uix.widget import Widget
 
-        sampling_rate = 100
-        read_task.timing.cfg_samp_clk_timing(sampling_rate,
-                                        sample_mode=AcquisitionType.CONTINUOUS)
+# General imports
+import collections
+import numpy
+import time
+from threading import Thread
 
-        reader = AnalogSingleChannelReader(read_task.in_stream)
+# Responsible for getting data from the NI DAQ and storing it
+class DAQ:
 
-        value_read = reader.read_one_sample()
+    def __init__(self, device):
+        self.device = device
+        self.samplingRate = 100  # Sampling rate in Hz
+        self.historyLength = 500 # Number of samples in buffer to be displayed
+        self.numberOfChannles = 5 # Assumes channels are 0 -> numberOfChannles
+        self.minVal = -1 # Sets the range for the DAQ in volts, reducing range increases precision
+        self.maxVal = 1
 
-        print("value read: " + str(value_read))
+        # This creates a list of FIFO buffers of a fixed size, these buffers are how you access the channel data
+        self.channelBuffers = []
+        for i in range(self.numberOfChannles):
+            self.channelBuffers.append(collections.deque(self.historyLength*[0], 5))
 
-        global levels
-        global levels2
-        while True:
-            time.sleep(0.005)
-            #if len(levels) >= 100:
-                #levels = []
-            value_read = reader.read_one_sample()
-            levels.append(value_read)
-            levels2.append(value_read)
+    # Typically called on an individual thread to handle constant updating
+    def updateChannelsContinuosly(self):
+        # Create a new task to perform the reading, this task will die when this method ends
+        with nidaqmx.Task() as readTask:
+            # Add all of the channels connected at the box level (5)
+            for i in range(self.numberOfChannles):
+                readTask.ai_channels.add_ai_voltage_chan(self.device + "ai" + str(i),
+                    max_val=self.maxVal, min_val=self.minVal)
 
-class Logic(BoxLayout):
-    def __init__(self, **kwargs):
-        super(Logic, self).__init__(**kwargs)
-        self.graph = Graph(xlabel='X', ylabel='Y', x_ticks_minor=5,
-                x_ticks_major=25, y_ticks_major=1,
-                y_grid_label=True, x_grid_label=True, padding=5,
-                x_grid=True, y_grid=True, xmin=-0, xmax=500, ymin=-1, ymax=1)
-        self.plot = MeshLinePlot(color=[0, 1, 1, 1])
-        self.plot2 = MeshLinePlot(color=[1, 0, 0, 1])
+            # This ensures that the DAQ is constantly sampling without prompt
+            readTask.timing.cfg_samp_clk_timing(self.samplingRate,
+                sample_mode=AcquisitionType.CONTINUOUS)
 
-        self.add_widget(self.graph)
+            # Stream reading allows for more elegant acquition at high rates
+            self.reader = AnalogMultiChannelReader(readTask.in_stream)
 
-    def start(self):
-        self.graph.add_plot(self.plot)
-        Clock.schedule_interval(self.get_value, 0.01)
+            # Streamreader requires a numpy array to save values to
+            holder_array = numpy.zeros(self.numberOfChannles, dtype=numpy.float64)
 
-    def stop(self):
-        Clock.unschedule(self.get_value)
+            while True:
+                self.reader.read_one_sample(holder_array)
 
-    def get_value(self, dt):
-        self.plot.points = [(i, j/5) for i, j in enumerate(levels)]
-        self.plot2.points = [(i, j/5) for i, j in enumerate(levels2)]
-        #print(levels)
+                for i in range(self.numberOfChannles):
+                    self.channelBuffers[i].append(holder_array[i])
 
+                time.sleep(1/(2*self.samplingRate))
 
-class RealTimeMicrophone(App):
+# Responsible for displaying and updating the data to graph
+class Graph(Widget):
+    def __init__(self):
+
+class DAQApp(App):
     def build(self):
-        return Builder.load_file("look.kv")
+        return Builder.load_file("DAQ.kv")
 
-if __name__ == "__main__":
-    levels = collections.deque(500*[0], 500)  # store levels of microphone
-    levels2 = collections.deque(500*[0], 500)
-    get_level_thread = Thread(target = get_microphone_level)
-    get_level_thread.daemon = True
-    get_level_thread.start()
-    RealTimeMicrophone().run()
+if __name__ == '__main__':
+    #DAQApp().run()
+    NI6008 = DAQ("Dev1/")
+    NI6008.samplingRate = 5
+    NI6008.updateChannelsContinuosly()
