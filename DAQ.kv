@@ -1,0 +1,61 @@
+#:kivy 1.0.9
+#:import MeshLinePlot kivy.garden.graph.MeshLinePlot
+
+<GraphValues>:
+    time_graph: time_graph
+    frequency_graph: frequency_graph
+
+    BoxLayout:
+        size: root.width, root.height
+        orientation: "vertical"
+        ActionBar:
+            ActionView:
+                ActionPrevious:
+                    with_previous: False
+                    app_icon: ''
+                ActionButton:
+                    id: start_button
+                    text: "START"
+                    on_press: root.start()
+                    disabled: False
+                ActionButton:
+                    id: stop_button
+                    text: "STOP"
+                    on_press: root.stop()
+                    disabled: True
+
+        Graph:
+            id: time_graph
+            plot: MeshLinePlot
+            background_color: [1, 1, 1, 0.3]
+            xlabel:'Time (S)'
+            ylabel:'Amplitude (V)'
+            x_ticks_major:1
+            y_ticks_major:0.5
+            y_grid_label:True
+            x_grid_label:True
+            padding:5
+            x_grid:True
+            y_grid:True
+            xmin:root.xMin
+            xmax:root.xMax
+            ymin:-1
+            ymax:1
+
+        Graph:
+            id: frequency_graph
+            plot: MeshLinePlot
+            background_color: [1, 1, 1, 0.3]
+            xlabel:'Frequency (Hz)'
+            ylabel:'Amplitude (dB)'
+            x_ticks_major:5
+            y_ticks_major:10
+            y_grid_label:True
+            x_grid_label:True
+            padding:5
+            x_grid:True
+            y_grid:True
+            xmin:0
+            xmax:100
+            ymin:0
+            ymax:10
