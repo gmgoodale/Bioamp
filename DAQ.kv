@@ -1,9 +1,45 @@
 #:kivy 1.0.9
 #:import MeshLinePlot kivy.garden.graph.MeshLinePlot
+#:import Factory kivy.factory.Factory
+#:import datetime datetime
+
+<PatientPopup@Popup>:
+    title: "Enter Patient Number"
+    auto_dismiss: False
+    size_hint: (0.4, 0.4)
+    BoxLayout:
+        orientation: "vertical"
+        TextInput:
+            id: input
+            hint_text:'Enter Patient Number'
+            size_hint: 0.95, 0.4
+        Button:
+            id: pButton
+            text: 'Start'
+            #on_release: root.dismiss()
+            size_hint: 0.95, 0.4
+
+# Define your background color Template
+<BackgroundColor@Widget>
+    background_color: 1, 1, 1, 0.1
+    canvas.before:
+        Color:
+            rgba: root.background_color
+        Rectangle:
+            size: self.size
+            pos: self.pos
+# Now you can simply Mix the `BackgroundColor` class with almost
+# any other widget... to give it a background.
+<BackgroundLabel@Label+BackgroundColor>
+    background_color: 0, 0, 0, 0
+    # Default the background color for this label
+    # to r 0, g 0, b 0, a 0
 
 <GraphValues>:
-    time_graph: time_graph
-    frequency_graph: frequency_graph
+    eng_graph: ENG
+    vitals_graph: ECG_ACCEL
+    frequency_graph: FFT
+    patient_popup: Factory.PatientPopup()
 
     BoxLayout:
         size: root.width, root.height
@@ -23,18 +59,16 @@
                     text: "STOP"
                     on_press: root.stop()
                     disabled: True
-
         Graph:
-            id: time_graph
+            id: ENG
             plot: MeshLinePlot
             background_color: [1, 1, 1, 0.3]
-            xlabel:'Time (S)'
             ylabel:'Amplitude (V)'
             #x_ticks_major:1
-            y_ticks_major:0.5
+            y_ticks_major:1
             y_grid_label:True
             x_grid_label:True
-            padding:5
+            padding: 5
             x_grid:True
             y_grid:True
             xmin:root.xMin
@@ -43,12 +77,54 @@
             ymax:2
 
         Graph:
-            id: frequency_graph
+            id: ECG_ACCEL
+            plot: MeshLinePlot
+            background_color: [1, 1, 1, 0.3]
+            ylabel:'Amplitude (V)'
+            #x_ticks_major:1
+            y_ticks_major:1
+            y_grid_label:True
+            x_grid_label:True
+            padding: 5
+            x_grid:True
+            y_grid:True
+            xmin:root.xMin
+            xmax:root.xMax
+            ymin:-2
+            ymax:2
+
+        # Time axis labels
+        BoxLayout:
+            size_hint: (1, 0.1)
+            orientation: "horizontal"
+            BackgroundLabel
+                text: str(datetime.timedelta(seconds=root.xMin))[0:10] + ' '
+                background_color: [1, 1, 1, 0.09]
+                text_size: self.size
+                halign: 'left'
+                valign: 'top'
+                padding:  (40, 0)
+            BackgroundLabel
+                text: "Time (S)"
+                background_color: [1, 1, 1, 0.09]
+                text_size: self.size
+                halign: 'center'
+                valign: 'top'
+                padding:  (40, 0)
+            BackgroundLabel
+                text: str(datetime.timedelta(seconds=root.xMax))[0:10] + ' '
+                background_color: [1, 1, 1, 0.09]
+                text_size: self.size
+                halign: 'right'
+                valign: 'top'
+
+        Graph:
+            id: FFT
             plot: MeshLinePlot
             background_color: [1, 1, 1, 0.3]
             xlabel:'Frequency (Hz)'
             ylabel:'Amplitude (dB)'
-            x_ticks_major:5
+            x_ticks_major:2
             y_ticks_major:10
             y_grid_label:True
             x_grid_label:True
@@ -56,6 +132,6 @@
             x_grid:True
             y_grid:True
             xmin:0
-            xmax:100
+            xmax:10
             ymin:0
             ymax:100
