@@ -38,6 +38,8 @@ class FFT:
         for DEQ in timeDEQs:
             timeArray = numpy.asarray(DEQ)[:,1]
             chFrequencies.append(numpy.abs(fft(timeArray)))
+            # Logarithimic mode, this is a bit slower
+            #chFrequencies.append(20*numpy.log10(numpy.abs(fft(timeArray))))
             i+=1
 
         # Generate the X axis values which are the discrete frequency values
@@ -87,12 +89,15 @@ class FileHandling:
         dataLine = ''.join([dataLine, "\n"])
         self.file.write(dataLine)
 
-
     def Close(self):
         # Flush the buffer and ensure everything is saved to disk before closing
         self.file.flush()
         os.fsync(self.file.fileno())
         self.file.close()
+
+    def FileSync(self):
+        self.file.flush()
+        os.fsync(self.file.fileno())
 
     def toRaw(self, string):
         return fr"{string}"
@@ -102,7 +107,7 @@ class FileHandling:
 # buffers as deques it will be compatible with all of the code
 class NIDAQ:
 
-    def __init__(self, device, numChannels = 1, samplingRate = 5, histLen = 20, FFTSampleReduction = 4, FFTChannels = 2):
+    def __init__(self, device, numChannels = 1, samplingRate = 5, histLen = 20, FFTSampleReduction = 4, FFTChannels = 2, fileName = "01"):
         self.device = device
         self.samplingRate = samplingRate  # Sampling rate in Hz
         self.historyLength =  histLen # Number of samples in buffer to be displayed
@@ -129,8 +134,8 @@ class NIDAQ:
             # deque(dataype, maxlen of deque), note [(0,0)] is a list of tuples
             self.FFTBuffers.append(collections.deque([(0, 0)], self.FFTLen))
 
-        # TESTING, THIS WILL BE REMOVED LATER
-        #self.file = FileHandling("01", self.numberOfChannles)
+        # Run the file creation tool for file handling
+        self.file = FileHandling(fileName, self.numberOfChannles)
 
     # This sets up the daq task and then spins out a process and thread to read from the DAQ
     def startUpdatingChannels(self):
@@ -166,6 +171,9 @@ class NIDAQ:
             time.sleep(0.05)
             self.process.join()
 
+        # Close the fileno
+        self.file.Close()
+
     # Must be called called on an individual thread to handle constant updating
     def readIntoBuffersContinuosly(self):
         # This allows the thread to be stopped from the function that called it
@@ -173,19 +181,21 @@ class NIDAQ:
         flag = 0
         while getattr(NIDAQThread, "continueRunning", True):
 
+            channelValues = []
             for i in range(self.numberOfChannles):
-                    daqValue = self.queues[i].get()
-                    self.channelBuffers[i].append((self.timeElapsed,daqValue))
+                daqValue = self.queues[i].get()
+                self.channelBuffers[i].append((self.timeElapsed, daqValue))
+                channelValues.append(daqValue)
+                # Ensures FFT buffer saves some smaller number of samples
+                if (flag == self.FFTSampleReduction):
+                    self.FFTBuffers[i].append((self.timeElapsed, daqValue))
+                    # Ensures all channels are updated before resetting
+                    if (i == self.FFTChannels - 1):
+                        flag = 0
 
-                    if (flag == self.FFTSampleReduction):
-                        self.FFTBuffers[i].append((self.timeElapsed, daqValue))
-                        # Ensures all channels are updated before resetting
-                        if (i == self.FFTChannels - 1):
-                            flag = 0
-
+            self.file.SaveData(self.timeElapsed, channelValues)
             flag += 1
             self.timeElapsed += (1/self.samplingRate)
-        #self.file.Close()
 
     # Must be called called on an individual process to handle constant updating
     @staticmethod
@@ -235,6 +245,9 @@ class GraphValues(Widget):
     # Init must take in *kwargs for some reason. Something to do with inheriting from the Widget class
     def __init__(self, NIDevice, **kwargs):
         super(GraphValues, self).__init__(**kwargs)
+        self.patientNumber = "01"
+
+        self.NIDevice = NIDevice
         self.DAQSampleRate = 1000
         self.histLen = 4000
         self.firstStart = True
@@ -256,11 +269,6 @@ class GraphValues(Widget):
         self.vitalsPlots = self.addGraphingPlots(self.vitalsChannelsToPlot, self.vitals_graph)
         self.freqPlots = self.addGraphingPlots(self.FFTChannels, self.frequency_graph)
 
-        # This instantiation is important, it sets up the number of channels, buffer size and things of the like
-        self.DAQ = NIDAQ(NIDevice, numChannels = len(self.channelsToRecord),
-                samplingRate = self.DAQSampleRate, histLen = self.histLen,
-                FFTSampleReduction = self.FFTSampleReduction, FFTChannels = len(self.FFTChannels))
-
     # This adds plots to a kivy graph widget
     def addGraphingPlots(self, plotsToAdd, graphToAddTo):
         plots = []
@@ -276,28 +284,44 @@ class GraphValues(Widget):
         # Disable the start button to avoid trying to reserve the DAQ again
         self.ids.start_button.disabled = True
         self.ids.stop_button.disabled = False
+        self.ids.pause_button.disabled = False
 
         # Get the patient number for file directory to save to
-        #if (self.firstStart):
-            #self.firstStart = False
-            #self.patient_popup.open()
-            #self.patient_popup.ids.pButton.bind(on_press=self.startPopup)
-        #else:
+        if (self.firstStart):
+            self.firstStart = False
+            self.patient_popup.open()
+            self.patient_popup.ids.pButton.bind(on_press=self.startPopup)
+        else:
             # This reseres the DAQ and it continusly gathers voltages in the buffers
-        self.DAQ.startUpdatingChannels()
-
-        # This gets the graph to update every 0.02 seconds
-        Clock.schedule_interval(self.updateGraph, 0.05)
-        Clock.schedule_interval(self.updateFFT, 0.5)
+            self.DAQ.startUpdatingChannels()
+            # This gets the graph to update every 0.05 seconds
+            Clock.schedule_interval(self.updateGraph, 0.05)
+            Clock.schedule_interval(self.updateFFT, 1)
+            Clock.schedule_interval(self.syncFile, 5)
 
     def startPopup(self, *args):
-        print(str(self.patient_popup.ids.intput.text))
+        # Store the input from the user as the patient number
+        self.patientNumber = str(self.patient_popup.ids.input.text)
+
+        # The popup should now disappear
+        self.patient_popup.dismiss()
+
+        # This instantiation is important, it sets up the number of channels, buffer size and things of the like
+        self.DAQ = NIDAQ(self.NIDevice, numChannels = len(self.channelsToRecord),
+                samplingRate = self.DAQSampleRate, histLen = self.histLen,
+                FFTSampleReduction = self.FFTSampleReduction,
+                FFTChannels = len(self.FFTChannels), fileName = self.patientNumber)
 
         # This reseres the DAQ and it continusly gathers voltages in the buffers
         self.DAQ.startUpdatingChannels()
 
         # This gets the graph to update every 0.02 seconds
         Clock.schedule_interval(self.updateGraph, 0.05)
+        Clock.schedule_interval(self.updateFFT, 0.5)
+        Clock.schedule_interval(self.syncFile, 5)
+
+    def pause(self):
+        pass
 
     def stop(self):
         # Re-enable the start Button, disable stop button for aesthetics
@@ -310,6 +334,10 @@ class GraphValues(Widget):
         # This stops the graph from updating
         Clock.unschedule(self.updateGraph)
         Clock.unschedule(self.updateFFT)
+        Clock.unschedule(self.syncFile)
+
+        # The file has been closed so we will ask for a new patient number
+        self.firstStart = True
 
     # dt is update time interval and must be passed to any funciton called from clock
     def updateGraph(self, dt):
@@ -326,13 +354,17 @@ class GraphValues(Widget):
             plot.points = self.DAQ.channelBuffers[ch]
 
     def updateFFT(self, dt):
-        start = time.perf_counter()
+        #start = time.perf_counter()
         ffts = FFT.FFTFromDEQ(self.DAQ.FFTBuffers, self.DAQSampleRate/self.FFTSampleReduction)
-        print("FFT Time: " + str(time.perf_counter() - start), flush=True)
+        #print("FFT Time: " + str(time.perf_counter() - start), flush=True)
 
         # Update the points on frequency graph on the bottom
         for plot, fft in zip(self.freqPlots, ffts):
             plot.points = fft
+
+    # Ensures file save info gets pushed to disk
+    def syncFile(self, dt):
+        self.DAQ.file.FileSync()
 
     # This just returns a unique color for the first 5 channels, if there is a better way to do this, please do
     def ColorGenerator(self, ch):
