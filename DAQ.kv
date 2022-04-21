@@ -69,6 +69,16 @@
                     text: "STOP"
                     on_press: root.stop()
                     disabled: True
+
+        BackgroundLabel
+            text: "EEnG Graph"
+            size_hint: (1, 0.04)
+            background_color: [0.15, 0.15, 0.17, 1]
+            text_size: self.size
+            halign: 'center'
+            #valign: 'top'
+            #padding:  (40, 0)
+
         Graph:
             id: ENG
             size_hint: (1, 0.3)
@@ -86,6 +96,15 @@
             xmax:root.xMax
             ymin:-2
             ymax:2
+
+        BackgroundLabel
+            text: "ECG and Accelerometer Graph"
+            size_hint: (1, 0.04)
+            background_color: [0.15, 0.15, 0.17, 1]
+            text_size: self.size
+            halign: 'center'
+            #valign: 'top'
+            #padding:  (40, 0)
 
         Graph:
             id: ECG_ACCEL
@@ -128,6 +147,15 @@
                 text_size: self.size
                 halign: 'right'
                 valign: 'top'
+
+        BackgroundLabel
+            text: "FFT of EEnG"
+            size_hint: (1, 0.04)
+            background_color: [0.15, 0.15, 0.17, 1]
+            text_size: self.size
+            halign: 'center'
+            #valign: 'top'
+            #padding:  (40, 0)
 
         Graph:
             id: FFT
